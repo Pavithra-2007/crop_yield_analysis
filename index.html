@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crop Yield Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            margin: 0;
+            color: white;
+            text-align: center;
+        }
+
+        h1 {
+            padding: 20px;
+        }
+
+        .container {
+            width: 95%;
+            margin: auto;
+        }
+
+        .cards {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            background: white;
+            color: black;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 10px;
+            width: 250px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .filters {
+            margin: 20px;
+        }
+
+        select {
+            padding: 10px;
+            border-radius: 10px;
+            margin: 10px;
+        }
+
+        .chart-box {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🌾 Crop Yield Analytics Dashboard</h1>
+
+<div class="container">
+
+    <!-- KPI CARDS -->
+    <div class="cards">
+        <div class="card">
+            <h3>Total Records</h3>
+            <h2 id="total"></h2>
+        </div>
+        <div class="card">
+            <h3>Avg Yield</h3>
+            <h2 id="avg"></h2>
+        </div>
+        <div class="card">
+            <h3>Max Yield</h3>
+            <h2 id="max"></h2>
+        </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="filters">
+        <select id="regionFilter">
+            <option value="">All Regions</option>
+        </select>
+
+        <select id="cropFilter">
+            <option value="">All Crops</option>
+        </select>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="chart-box">
+        <h3>📈 Yield Trend</h3>
+        <canvas id="chart1"></canvas>
+    </div>
+
+    <div class="chart-box">
+        <h3>🌍 Region Comparison</h3>
+        <canvas id="chart2"></canvas>
+    </div>
+
+    <div class="chart-box">
+        <h3>🌾 Crop Comparison</h3>
+        <canvas id="chart3"></canvas>
+    </div>
+
+</div>
+
+<script>
+let chart1, chart2, chart3;
+
+fetch("http://127.0.0.1:5000/data")
+.then(res => res.json())
+.then(data => {
+
+    const regionSet = [...new Set(data.map(d => d.Region))];
+    const cropSet = [...new Set(data.map(d => d.Crop))];
+
+    const regionDropdown = document.getElementById("regionFilter");
+    const cropDropdown = document.getElementById("cropFilter");
+
+    regionSet.forEach(r => {
+        let opt = new Option(r, r);
+        regionDropdown.add(opt);
+    });
+
+    cropSet.forEach(c => {
+        let opt = new Option(c, c);
+        cropDropdown.add(opt);
+    });
+
+    function renderDashboard() {
+
+        let region = regionDropdown.value;
+        let crop = cropDropdown.value;
+
+        let filtered = data.filter(d => {
+            return (!region || d.Region === region) &&
+                   (!crop || d.Crop === crop);
+        });
+
+        // KPI
+        document.getElementById("total").innerText = filtered.length;
+        document.getElementById("avg").innerText =
+            (filtered.reduce((a,b)=>a+b.Yield_kg_per_ha,0)/filtered.length).toFixed(2);
+
+        document.getElementById("max").innerText =
+            Math.max(...filtered.map(d=>d.Yield_kg_per_ha)).toFixed(2);
+
+        // Destroy old charts
+        if(chart1) chart1.destroy();
+        if(chart2) chart2.destroy();
+        if(chart3) chart3.destroy();
+
+        // Chart 1 - Trend
+        chart1 = new Chart(document.getElementById("chart1"), {
+            type: "line",
+            data: {
+                labels: filtered.map(d=>d.Year),
+                datasets: [{
+                    label: "Yield",
+                    data: filtered.map(d=>d.Yield_kg_per_ha),
+                    borderColor: "blue",
+                    fill: true
+                }]
+            }
+        });
+
+        // Chart 2 - Region
+        let regionMap = {};
+        filtered.forEach(d=>{
+            if(!regionMap[d.Region]) regionMap[d.Region]=[];
+            regionMap[d.Region].push(d.Yield_kg_per_ha);
+        });
+
+        chart2 = new Chart(document.getElementById("chart2"), {
+            type: "bar",
+            data: {
+                labels: Object.keys(regionMap),
+                datasets: [{
+                    label: "Avg Yield",
+                    data: Object.values(regionMap).map(v=>v.reduce((a,b)=>a+b)/v.length),
+                    backgroundColor: ["red","green","blue","orange","purple"]
+                }]
+            }
+        });
+
+        // Chart 3 - Crop
+        let cropMap = {};
+        filtered.forEach(d=>{
+            if(!cropMap[d.Crop]) cropMap[d.Crop]=[];
+            cropMap[d.Crop].push(d.Yield_kg_per_ha);
+        });
+
+        chart3 = new Chart(document.getElementById("chart3"), {
+            type: "pie",
+            data: {
+                labels: Object.keys(cropMap),
+                datasets: [{
+                    data: Object.values(cropMap).map(v=>v.reduce((a,b)=>a+b)/v.length),
+                    backgroundColor: ["gold","green","blue","pink","cyan"]
+                }]
+            }
+        });
+    }
+
+    renderDashboard();
+
+    regionDropdown.addEventListener("change", renderDashboard);
+    cropDropdown.addEventListener("change", renderDashboard);
+
+});
+</script>
+
+</body>
+</html>
